@@ -1,3 +1,5 @@
+// Package datatable contains the implementation of a data table tries to solve
+// shortcomings of gherkin.DataTable.
 package datatable
 
 import (
