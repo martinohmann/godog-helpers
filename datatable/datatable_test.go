@@ -16,12 +16,12 @@ func TestFromGherkin(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}
 
-	if !reflect.DeepEqual(dt.Fields, fields) {
-		t.Fatalf("expected fields %#v, got %#v", fields, dt.Fields)
+	if !reflect.DeepEqual(dt.Fields(), fields) {
+		t.Fatalf("expected fields %#v, got %#v", fields, dt.Fields())
 	}
 
-	if !reflect.DeepEqual(dt.Rows, rows) {
-		t.Fatalf("expected fields %#v, got %#v", rows, dt.Rows)
+	if !reflect.DeepEqual(dt.RowValues(), rows) {
+		t.Fatalf("expected fields %#v, got %#v", rows, dt.RowValues())
 	}
 }
 
@@ -32,10 +32,88 @@ func TestFromMalformedGherkin(t *testing.T) {
 	}
 }
 
+func TestNewWithOptions(t *testing.T) {
+	cases := []struct {
+		name        string
+		options     *Options
+		fields      []string
+		rows        [][]string
+		expectError bool
+	}{
+		{
+			name:   "no options, correct row length",
+			fields: []string{"name", "value"},
+			rows:   [][]string{{"foo", "bar"}},
+		},
+		{
+			name:        "no options, incorrect row length",
+			fields:      []string{"name", "value"},
+			rows:        [][]string{{"foo"}},
+			expectError: true,
+		},
+		{
+			name:    "required fields present",
+			options: &Options{RequiredFields: []string{"value", "name"}},
+			fields:  []string{"name", "value"},
+			rows:    [][]string{{"foo", "bar"}},
+		},
+		{
+			name:    "required fields and additional fields present",
+			options: &Options{RequiredFields: []string{"value", "name"}},
+			fields:  []string{"name", "value", "additonal"},
+			rows:    [][]string{{"foo", "bar", "baz"}},
+		},
+		{
+			name:        "unknown field",
+			options:     &Options{OptionalFields: []string{"value", "name"}},
+			fields:      []string{"name", "unknown"},
+			rows:        [][]string{{"foo", "baz"}},
+			expectError: true,
+		},
+		{
+			name: "required and optional fields",
+			options: &Options{
+				RequiredFields: []string{"name", "value"},
+				OptionalFields: []string{"tag"},
+			},
+			fields:      []string{"name", "value", "tag"},
+			rows:        [][]string{{"foo", "bar", "baz"}},
+			expectError: false,
+		},
+		{
+			name: "required and optional fields, unknown additional field",
+			options: &Options{
+				RequiredFields: []string{"name", "value"},
+				OptionalFields: []string{"tag"},
+			},
+			fields:      []string{"name", "value", "tag", "unknown"},
+			rows:        [][]string{{"foo", "bar", "baz", "qux"}},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewWithOptions(tc.options, tc.fields, tc.rows...)
+			if tc.expectError {
+				if err == nil {
+					t.Fatal("expected error but got nil")
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err.Error())
+			}
+		})
+	}
+}
+
 func TestCopy(t *testing.T) {
 	fields, rows := testData()
 
-	dt := New(fields, rows...)
+	dt, err := New(fields, rows...)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err.Error())
+	}
+
 	ct := dt.Copy()
 
 	if ct == dt {
@@ -50,7 +128,10 @@ func TestCopy(t *testing.T) {
 func TestRowOperations(t *testing.T) {
 	fields, rows := testData()
 
-	dt := New(fields, rows...)
+	dt, err := New(fields, rows...)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err.Error())
+	}
 
 	index := dt.FindRow([]string{"4", "5", "6"})
 	if index != 1 {
@@ -64,7 +145,7 @@ func TestRowOperations(t *testing.T) {
 		t.Fatalf("expected index -1, got %d", index)
 	}
 
-	err := dt.AppendRow([]string{"10", "11", "12"})
+	err = dt.AppendRow([]string{"10", "11", "12"})
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}
@@ -75,12 +156,15 @@ func TestRowOperations(t *testing.T) {
 	}
 }
 
-func TestSlice(t *testing.T) {
+func TestRows(t *testing.T) {
 	fields, rows := testData()
 
-	dt := New(fields, rows...)
+	dt, err := New(fields, rows...)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err.Error())
+	}
 
-	s := dt.Slice()
+	s := dt.Rows()
 
 	expected := []map[string]string{
 		{"one": "1", "two": "2", "three": "3"},
